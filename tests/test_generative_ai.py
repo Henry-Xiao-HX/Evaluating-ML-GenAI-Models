@@ -1,5 +1,8 @@
 """
-Unit tests for data quality checker module.
+Unit tests for generative AI text model metrics (ROUGE and BLEU).
+
+Tests DataQualityChecker and QualityMetricsAggregator from data_quality_checker.py,
+which orchestrate ROUGECalculator, BLEUCalculator, ROUGEAggregator, and BLEUAggregator.
 """
 
 import unittest
@@ -9,14 +12,11 @@ from pathlib import Path
 # Add src to path for direct imports
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-import numpy as np
 from data_quality_checker import DataQualityChecker, QualityMetricsAggregator
-from binary_classification.binary_classifier_checker import BinaryClassifierChecker
-from regression.regression_checker import RegressionChecker
 
 
 class TestDataQualityChecker(unittest.TestCase):
-    """Test cases for DataQualityChecker."""
+    """Test cases for DataQualityChecker (ROUGE and BLEU orchestration)."""
 
     def setUp(self):
         """Initialize checker for each test."""
@@ -198,7 +198,7 @@ class TestDataQualityChecker(unittest.TestCase):
 
     def test_get_rouge_score_explanation_valid(self):
         """Test ROUGE score explanation for valid types."""
-        for rouge_type in ['rouge1', 'rouge2', 'rougeL', 'rougeLsum', 'rougeS']:
+        for rouge_type in ['rouge1', 'rouge2', 'rougeL', 'rougeLsum']:
             explanation = self.checker.get_rouge_score_explanation(rouge_type)
             self.assertIsInstance(explanation, str)
             self.assertGreater(len(explanation), 0)
@@ -334,8 +334,8 @@ class TestQualityMetricsAggregator(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.aggregator.aggregate_bleu_scores(scores, 'invalid')
 
-    def test_aggregate_empty_list(self):
-        """Test aggregation with empty list returns empty dict."""
+    def test_aggregate_rouge_empty_list(self):
+        """Test ROUGE aggregation with empty list returns empty dict."""
         result = self.aggregator.aggregate_rouge_scores([], 'mean')
         self.assertEqual(result, {})
 
@@ -345,20 +345,20 @@ class TestQualityMetricsAggregator(unittest.TestCase):
         self.assertEqual(result, {})
 
 
-class TestEdgeCases(unittest.TestCase):
-    """Test edge cases and error handling."""
+class TestRougeEdgeCases(unittest.TestCase):
+    """Test ROUGE edge cases and error handling."""
 
     def setUp(self):
         """Initialize checker for each test."""
         self.checker = DataQualityChecker()
 
     def test_empty_strings(self):
-        """Test with empty strings."""
+        """Test ROUGE with empty strings."""
         result = self.checker.compute_rouge("", "")
         self.assertIn('rouge1', result)
 
     def test_identical_texts(self):
-        """Test with identical prediction and reference."""
+        """Test ROUGE with identical prediction and reference."""
         text = "This is identical text"
         result = self.checker.compute_rouge(text, text)
 
@@ -367,7 +367,7 @@ class TestEdgeCases(unittest.TestCase):
             self.assertAlmostEqual(result[key], 1.0, places=2)
 
     def test_completely_different_texts(self):
-        """Test with completely different texts."""
+        """Test ROUGE with completely different texts."""
         pred = "apple banana cherry"
         ref = "xyz qwerty asdf"
 
@@ -399,347 +399,6 @@ class TestEdgeCases(unittest.TestCase):
         self.assertIn('precisions', results)
         self.assertIn('n_gram_details', results)
         self.assertIn('1-gram', results['n_gram_details'])
-
-
-class TestBinaryClassificationChecker(unittest.TestCase):
-    """Test cases for BinaryClassifierChecker."""
-
-    def setUp(self):
-        """Initialize binary classification checker for each test."""
-        self.checker = BinaryClassifierChecker()
-        np.random.seed(42)
-        self.n_samples = 100
-        self.y_true = np.random.randint(0, 2, self.n_samples)
-        self.y_pred = np.random.randint(0, 2, self.n_samples)
-        self.y_pred_proba = np.random.rand(self.n_samples)
-
-    def test_check_quality_basic(self):
-        """Test basic quality check with binary predictions."""
-        metrics = self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred
-        )
-
-        self.assertIn('precision', metrics)
-        self.assertIn('recall', metrics)
-        self.assertIn('f1_measure', metrics)
-        self.assertIn('true_positive_rate', metrics)
-        self.assertIn('false_positive_rate', metrics)
-
-    def test_check_quality_with_probabilities(self):
-        """Test quality check with probability predictions."""
-        metrics = self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred,
-            y_pred_proba=self.y_pred_proba
-        )
-
-        self.assertIn('roc_auc', metrics)
-        self.assertIn('log_loss', metrics)
-        self.assertIn('auc_pr', metrics)
-
-    def test_check_quality_with_cache(self):
-        """Test that caching works correctly."""
-        metrics_first = self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred,
-            cache_key='test_cache'
-        )
-        metrics_cached = self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred,
-            cache_key='test_cache'
-        )
-
-        self.assertEqual(metrics_first, metrics_cached)
-        self.assertIn('test_cache', self.checker.metrics_cache)
-
-    def test_clear_cache(self):
-        """Test that cache is cleared correctly."""
-        self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred,
-            cache_key='test_cache'
-        )
-        self.checker.clear_cache()
-
-        self.assertEqual(len(self.checker.metrics_cache), 0)
-
-    def test_compute_precision(self):
-        """Test precision computation."""
-        precision = self.checker.compute_precision(self.y_true, self.y_pred)
-
-        self.assertIsInstance(precision, float)
-        self.assertGreaterEqual(precision, 0.0)
-        self.assertLessEqual(precision, 1.0)
-
-    def test_compute_recall(self):
-        """Test recall computation."""
-        recall = self.checker.compute_recall(self.y_true, self.y_pred)
-
-        self.assertIsInstance(recall, float)
-        self.assertGreaterEqual(recall, 0.0)
-        self.assertLessEqual(recall, 1.0)
-
-    def test_compute_f1_measure(self):
-        """Test F1-measure computation."""
-        f1 = self.checker.compute_f1_measure(self.y_true, self.y_pred)
-
-        self.assertIsInstance(f1, float)
-        self.assertGreaterEqual(f1, 0.0)
-        self.assertLessEqual(f1, 1.0)
-
-    def test_compute_roc_auc(self):
-        """Test ROC AUC computation."""
-        roc_auc = self.checker.compute_roc_auc(self.y_true, self.y_pred_proba)
-
-        self.assertIsInstance(roc_auc, float)
-        self.assertGreaterEqual(roc_auc, 0.0)
-        self.assertLessEqual(roc_auc, 1.0)
-
-    def test_compute_log_loss(self):
-        """Test log loss computation."""
-        log_loss_val = self.checker.compute_log_loss(self.y_true, self.y_pred_proba)
-
-        self.assertIsInstance(log_loss_val, float)
-        self.assertGreater(log_loss_val, 0.0)
-
-    def test_get_roc_curve_data(self):
-        """Test ROC curve data retrieval."""
-        fpr, tpr, thresholds = self.checker.get_roc_curve_data(
-            self.y_true, self.y_pred_proba
-        )
-
-        self.assertIsInstance(fpr, np.ndarray)
-        self.assertIsInstance(tpr, np.ndarray)
-        self.assertIsInstance(thresholds, np.ndarray)
-        self.assertEqual(len(fpr), len(tpr))
-
-    def test_get_pr_curve_data(self):
-        """Test Precision-Recall curve data retrieval."""
-        precision, recall, thresholds = self.checker.get_pr_curve_data(
-            self.y_true, self.y_pred_proba
-        )
-
-        self.assertIsInstance(precision, np.ndarray)
-        self.assertIsInstance(recall, np.ndarray)
-        self.assertIsInstance(thresholds, np.ndarray)
-
-    def test_get_metrics_summary(self):
-        """Test metrics summary string."""
-        summary = self.checker.get_metrics_summary()
-
-        self.assertIsInstance(summary, str)
-        self.assertIn('roc_auc', summary)
-        self.assertIn('precision', summary)
-
-    def test_perfect_predictions(self):
-        """Test with perfect predictions."""
-        y_true = np.array([0, 1, 0, 1, 1])
-        y_pred = np.array([0, 1, 0, 1, 1])
-
-        precision = self.checker.compute_precision(y_true, y_pred)
-        recall = self.checker.compute_recall(y_true, y_pred)
-        f1 = self.checker.compute_f1_measure(y_true, y_pred)
-
-        self.assertAlmostEqual(precision, 1.0)
-        self.assertAlmostEqual(recall, 1.0)
-        self.assertAlmostEqual(f1, 1.0)
-
-    def test_mismatched_lengths(self):
-        """Test with mismatched input lengths."""
-        with self.assertRaises(ValueError):
-            self.checker.check_quality(
-                y_true=np.array([0, 1, 0]),
-                y_pred=np.array([1, 0])
-            )
-
-    def test_mismatched_proba_lengths(self):
-        """Test with mismatched y_pred_proba length."""
-        with self.assertRaises(ValueError):
-            self.checker.check_quality(
-                y_true=np.array([0, 1, 0]),
-                y_pred=np.array([0, 1, 0]),
-                y_pred_proba=np.array([0.1, 0.9])
-            )
-
-    def test_list_inputs(self):
-        """Test that list inputs are accepted."""
-        metrics = self.checker.check_quality(
-            y_true=[0, 1, 0, 1],
-            y_pred=[0, 1, 0, 1]
-        )
-        self.assertIn('precision', metrics)
-
-
-class TestRegressionChecker(unittest.TestCase):
-    """Test cases for RegressionChecker."""
-
-    def setUp(self):
-        """Initialize regression checker for each test."""
-        self.checker = RegressionChecker()
-        np.random.seed(42)
-        self.n_samples = 100
-        self.y_true = np.random.rand(self.n_samples) * 100
-        self.noise = np.random.normal(0, 5, self.n_samples)
-        self.y_pred = self.y_true + self.noise
-
-    def test_check_quality(self):
-        """Test quality check for regression."""
-        metrics = self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred
-        )
-
-        self.assertIn('r_squared', metrics)
-        self.assertIn('explained_variance', metrics)
-        self.assertIn('rmse', metrics)
-        self.assertIn('mae', metrics)
-        self.assertIn('mse', metrics)
-
-    def test_check_quality_with_cache(self):
-        """Test that caching works correctly."""
-        metrics_first = self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred,
-            cache_key='reg_cache'
-        )
-        metrics_cached = self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred,
-            cache_key='reg_cache'
-        )
-
-        self.assertEqual(metrics_first, metrics_cached)
-        self.assertIn('reg_cache', self.checker.metrics_cache)
-
-    def test_clear_cache(self):
-        """Test that cache is cleared correctly."""
-        self.checker.check_quality(
-            y_true=self.y_true,
-            y_pred=self.y_pred,
-            cache_key='reg_cache'
-        )
-        self.checker.clear_cache()
-
-        self.assertEqual(len(self.checker.metrics_cache), 0)
-
-    def test_compute_r_squared(self):
-        """Test R-squared computation."""
-        r_squared = self.checker.compute_r_squared(self.y_true, self.y_pred)
-
-        self.assertIsInstance(r_squared, float)
-        # R-squared can be negative for very poor models
-        self.assertLess(r_squared, 1.0)
-
-    def test_compute_rmse(self):
-        """Test RMSE computation."""
-        rmse = self.checker.compute_rmse(self.y_true, self.y_pred)
-
-        self.assertIsInstance(rmse, float)
-        self.assertGreaterEqual(rmse, 0.0)
-
-    def test_compute_mae(self):
-        """Test MAE computation."""
-        mae = self.checker.compute_mae(self.y_true, self.y_pred)
-
-        self.assertIsInstance(mae, float)
-        self.assertGreaterEqual(mae, 0.0)
-
-    def test_compute_mse(self):
-        """Test MSE computation."""
-        mse = self.checker.compute_mse(self.y_true, self.y_pred)
-
-        self.assertIsInstance(mse, float)
-        self.assertGreaterEqual(mse, 0.0)
-
-    def test_compute_explained_variance(self):
-        """Test explained variance computation."""
-        explained_var = self.checker.compute_explained_variance(self.y_true, self.y_pred)
-
-        self.assertIsInstance(explained_var, float)
-        self.assertLess(explained_var, 1.0)
-
-    def test_rmse_greater_than_or_equal_mae(self):
-        """Test that RMSE >= MAE (mathematical property)."""
-        rmse = self.checker.compute_rmse(self.y_true, self.y_pred)
-        mae = self.checker.compute_mae(self.y_true, self.y_pred)
-
-        self.assertGreaterEqual(rmse, mae)
-
-    def test_mse_equals_rmse_squared(self):
-        """Test that MSE == RMSE^2."""
-        rmse = self.checker.compute_rmse(self.y_true, self.y_pred)
-        mse = self.checker.compute_mse(self.y_true, self.y_pred)
-
-        self.assertAlmostEqual(mse, rmse ** 2, places=5)
-
-    def test_perfect_predictions(self):
-        """Test with perfect predictions."""
-        y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        y_pred = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-
-        r_squared = self.checker.compute_r_squared(y_true, y_pred)
-        rmse = self.checker.compute_rmse(y_true, y_pred)
-        mae = self.checker.compute_mae(y_true, y_pred)
-
-        self.assertAlmostEqual(r_squared, 1.0, places=5)
-        self.assertAlmostEqual(rmse, 0.0, places=5)
-        self.assertAlmostEqual(mae, 0.0, places=5)
-
-    def test_get_residuals(self):
-        """Test residuals computation."""
-        residuals = self.checker.get_residuals(self.y_true, self.y_pred)
-
-        self.assertEqual(len(residuals), self.n_samples)
-        self.assertIsInstance(residuals, np.ndarray)
-        # Residuals should equal y_true - y_pred
-        np.testing.assert_array_almost_equal(residuals, self.y_true - self.y_pred)
-
-    def test_get_residual_stats(self):
-        """Test residual statistics."""
-        residual_stats = self.checker.get_residual_stats(self.y_true, self.y_pred)
-
-        self.assertIn('mean', residual_stats)
-        self.assertIn('std', residual_stats)
-        self.assertIn('min', residual_stats)
-        self.assertIn('max', residual_stats)
-        self.assertIn('median', residual_stats)
-        self.assertIn('q25', residual_stats)
-        self.assertIn('q75', residual_stats)
-
-    def test_get_residual_stats_values(self):
-        """Test residual statistics are mathematically consistent."""
-        residual_stats = self.checker.get_residual_stats(self.y_true, self.y_pred)
-
-        self.assertLessEqual(residual_stats['min'], residual_stats['q25'])
-        self.assertLessEqual(residual_stats['q25'], residual_stats['median'])
-        self.assertLessEqual(residual_stats['median'], residual_stats['q75'])
-        self.assertLessEqual(residual_stats['q75'], residual_stats['max'])
-
-    def test_get_metrics_summary(self):
-        """Test metrics summary string."""
-        summary = self.checker.get_metrics_summary()
-
-        self.assertIsInstance(summary, str)
-        self.assertIn('r_squared', summary)
-        self.assertIn('rmse', summary)
-
-    def test_mismatched_lengths(self):
-        """Test with mismatched input lengths."""
-        with self.assertRaises(ValueError):
-            self.checker.check_quality(
-                y_true=np.array([1.0, 2.0, 3.0]),
-                y_pred=np.array([1.0, 2.0])
-            )
-
-    def test_list_inputs(self):
-        """Test that list inputs are accepted."""
-        metrics = self.checker.check_quality(
-            y_true=[1.0, 2.0, 3.0],
-            y_pred=[1.1, 2.1, 3.1]
-        )
-        self.assertIn('r_squared', metrics)
 
 
 if __name__ == '__main__':

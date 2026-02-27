@@ -47,8 +47,12 @@ def text_data():
 def pytest_collection_modifyitems(config, items):
     """Add markers to tests for better organization."""
     for item in items:
-        if "test_data_quality_checker" in str(item.fspath):
+        if "test_generative_ai" in str(item.fspath):
             item.add_marker(pytest.mark.text_metrics)
+        elif "test_binary_classification" in str(item.fspath):
+            item.add_marker(pytest.mark.binary_classification)
+        elif "test_regression" in str(item.fspath):
+            item.add_marker(pytest.mark.regression)
         elif "test_utils" in str(item.fspath):
             item.add_marker(pytest.mark.utils)
 
