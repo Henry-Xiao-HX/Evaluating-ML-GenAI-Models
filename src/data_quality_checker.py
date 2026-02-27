@@ -4,7 +4,7 @@ Orchestrates ROUGE and BLEU metrics computation.
 Uses Hugging Face evaluate library for metric computation.
 """
 
-from typing import List, Dict, Union, Optional
+from typing import Any, List, Dict, Union, Optional
 import numpy as np
 
 try:
@@ -38,7 +38,6 @@ class DataQualityChecker:
         self.bleu_calculator = BLEUCalculator()
         self.rouge_aggregator = ROUGEAggregator()
         self.bleu_aggregator = BLEUAggregator()
-        self.metrics_cache = {}
     
     def compute_rouge(
         self,
@@ -77,10 +76,10 @@ class DataQualityChecker:
     def compute_bleu(
         self,
         predictions: Union[List[str], str],
-        references: Union[List[List[str]], List[str]],
+        references: Union[List[List[str]], List[str], Any],
         max_order: int = 4,
         smooth: bool = False
-    ) -> Dict[str, float]:
+    ) -> Dict[str, Any]:
         """
         Compute BLEU score.
         

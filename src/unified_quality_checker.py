@@ -175,10 +175,93 @@ class UnifiedDataQualityChecker:
         """
         return self.rouge_aggregator.aggregate_rouge_scores(scores_list, aggregation_type)
     
+    def check_quality(
+        self,
+        predictions: Any,
+        references: Any,
+        task_type: str,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """
+        Unified entry point for quality checking across all task types.
+
+        Args:
+            predictions: Model predictions. Type depends on task_type:
+                         - 'classification': np.ndarray of binary labels
+                         - 'regression': np.ndarray of numeric values
+                         - 'text_generation': List[str] of generated texts
+            references: Ground truth / reference values. Same type constraints as predictions.
+            task_type: One of 'classification', 'regression', 'text_generation'.
+            **kwargs: Additional keyword arguments forwarded to the underlying checker.
+                      e.g. y_pred_proba for classification, rouge_types for text_generation.
+
+        Returns:
+            Dictionary of quality metrics for the given task type.
+
+        Raises:
+            ValueError: If task_type is not one of the supported values.
+
+        Example:
+            >>> checker = UnifiedDataQualityChecker()
+            >>> report = checker.check_quality(
+            ...     predictions=["the cat sat"],
+            ...     references=["a cat sat"],
+            ...     task_type='text_generation'
+            ... )
+        """
+        supported_tasks = {'classification', 'regression', 'text_generation'}
+        if task_type not in supported_tasks:
+            raise ValueError(
+                f"Unsupported task_type: '{task_type}'. "
+                f"Valid options are: {supported_tasks}"
+            )
+
+        if task_type == 'classification':
+            y_pred_proba = kwargs.pop('y_pred_proba', None)
+            sample_weight = kwargs.pop('sample_weight', None)
+            cache_key = kwargs.pop('cache_key', None)
+            return self.check_binary_classification_quality(
+                y_true=references,
+                y_pred=predictions,
+                y_pred_proba=y_pred_proba,
+                sample_weight=sample_weight,
+                cache_key=cache_key,
+            )
+
+        if task_type == 'regression':
+            sample_weight = kwargs.pop('sample_weight', None)
+            cache_key = kwargs.pop('cache_key', None)
+            return self.check_regression_quality(
+                y_true=references,
+                y_pred=predictions,
+                sample_weight=sample_weight,
+                cache_key=cache_key,
+            )
+
+        # task_type == 'text_generation'
+        rouge_types = kwargs.pop('rouge_types', None)
+        use_stemmer = kwargs.pop('use_stemmer', False)
+        max_order = kwargs.pop('max_order', 4)
+        smooth = kwargs.pop('smooth', False)
+
+        rouge_scores = self.compute_rouge(
+            predictions=predictions,
+            references=references,
+            rouge_types=rouge_types,
+            use_stemmer=use_stemmer,
+        )
+        bleu_scores = self.compute_bleu(
+            predictions=predictions,
+            references=references,
+            max_order=max_order,
+            smooth=smooth,
+        )
+        return {'rouge': rouge_scores, 'bleu': bleu_scores}
+
     def get_available_modules(self) -> Dict[str, str]:
         """
         Get summary of available quality check modules.
-        
+
         Returns:
             Dictionary describing available modules.
         """
@@ -187,8 +270,12 @@ class UnifiedDataQualityChecker:
             'regression': 'R², RMSE, MAE, MSE, explained variance',
             'generative_ai_text': 'BLEU, ROUGE-1/2/L/S',
         }
-    
+
     def clear_all_caches(self) -> None:
         """Clear all metric caches."""
         self.binary_classifier_checker.clear_cache()
         self.regression_checker.clear_cache()
+
+
+# Alias for backwards compatibility with README documentation
+UnifiedQualityChecker = UnifiedDataQualityChecker
